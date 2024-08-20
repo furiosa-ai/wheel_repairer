@@ -27,23 +27,29 @@ class WheelRepairer:
         output_dir (str): Directory where the repaired wheel will be saved.
         platform (str): Detected platform from the wheel filename.
         wheel_files (list): List of files inside the wheel.
-        exclude_patterns (list): Patterns of files to be excluded from the wheel.
-        exclude_files (list): Files matching the exclude patterns.
+        exclude_patterns (list): Glob patterns of files to be excluded from the wheel.
+        exclude_regex (list): Regex patterns of files to be excluded from the wheel.
+        exclude_files (list): Files matching the exclude patterns or regex.
 
     Note:
         The presence of two platform tags (e.g., manylinux_2_17 and manylinux2014) 
         indicates compatibility with both newer and older manylinux standards, 
         maximizing the wheel's compatibility across different systems.
-    """
 
-    def __init__(self, wheel_path, output_dir="repaired_wheels", exclude_patterns=None):
+    This class supports both glob-style patterns and regular expressions for excluding files.
+    Glob patterns are simpler and suitable for basic file matching, while regular expressions
+    offer more powerful and flexible pattern matching capabilities.
+    """
+    def __init__(self, wheel_path, output_dir="repaired_wheels", exclude_patterns=None, exclude_regex=None):
         """Initialize the WheelRepairer.
 
         Args:
             wheel_path (str): Path to the wheel file to be repaired.
             output_dir (str, optional): Directory where the repaired wheel will be saved. 
                 Defaults to "repaired_wheels".
-            exclude_patterns (list, optional): List of patterns for files to exclude. 
+            exclude_patterns (list, optional): List of glob patterns for files to exclude. 
+                Defaults to None.
+            exclude_regex (list, optional): List of regex patterns for files to exclude. 
                 Defaults to None.
         """
         self.wheel_path = wheel_path
@@ -51,6 +57,7 @@ class WheelRepairer:
         self.platform = self._extract_platform()
         self.wheel_files = self._inspect_wheel()
         self.exclude_patterns = exclude_patterns or []
+        self.exclude_regex = exclude_regex or []
         self.exclude_files = self._find_matching_files()
 
     def _extract_platform(self):
@@ -77,31 +84,43 @@ class WheelRepairer:
             return zip_ref.namelist()
 
     def _find_matching_files(self):
-        """Find files in the wheel that match the exclude patterns.
+        """Find files in the wheel that match the exclude patterns or regex.
 
         Returns:
-            list: A list of file names that match the exclude patterns.
+            list: A list of file names that match the exclude patterns or regex.
         """
-        matching_files = []
+        matching_files = set()
         print("\nDebugging information for pattern matching:")
+        
+        # Glob pattern matching
         for pattern in self.exclude_patterns:
-            print(f"\nChecking pattern: {pattern}")
-            # If the pattern doesn't start with *, prepend **/
+            print(f"\nChecking glob pattern: {pattern}")
             if not pattern.startswith('*'):
                 pattern = f'**/{pattern}'
-            print(f"Adjusted pattern: {pattern}")
+            print(f"Adjusted glob pattern: {pattern}")
             for file in self.wheel_files:
                 if glob.fnmatch.fnmatch(file, pattern):
-                    print(f"  Matched: {file}")
-                    matching_files.append(file)
+                    print(f"  Matched (glob): {file}")
+                    matching_files.add(file)
                 else:
-                    print(f"  Not matched: {file}")
+                    print(f"  Not matched (glob): {file}")
+        
+        # Regex pattern matching
+        for regex in self.exclude_regex:
+            print(f"\nChecking regex pattern: {regex}")
+            pattern = re.compile(regex)
+            for file in self.wheel_files:
+                if pattern.search(file):
+                    print(f"  Matched (regex): {file}")
+                    matching_files.add(file)
+                else:
+                    print(f"  Not matched (regex): {file}")
         
         print("\nSummary of matched files:")
         for file in matching_files:
             print(f"  {file}")
         
-        return matching_files
+        return list(matching_files)
 
     def prepare_command(self):
         """Prepare the auditwheel repair command.
@@ -152,10 +171,11 @@ def main():
     parser.add_argument("wheel_path", help="Path to the wheel file to repair")
     parser.add_argument("-o", "--output-dir", default="repaired_wheels", help="Output directory for repaired wheels")
     parser.add_argument("--exclude", action='append', default=[], help="Patterns of files to exclude (can be used multiple times)")
+    parser.add_argument("--exclude-regex", action='append', default=[], help="Regex patterns of files to exclude (can be used multiple times)")
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes")
     args = parser.parse_args()
 
-    repairer = WheelRepairer(args.wheel_path, args.output_dir, args.exclude)
+    repairer = WheelRepairer(args.wheel_path, args.output_dir, args.exclude, args.exclude_regex)
     repairer.repair(dry_run=args.dry_run)
 
 if __name__ == "__main__":

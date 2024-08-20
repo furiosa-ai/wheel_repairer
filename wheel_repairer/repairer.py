@@ -5,7 +5,6 @@ import zipfile
 import re
 import argparse
 
-
 class WheelRepairer:
     """A class to repair wheel files using auditwheel.
 
@@ -14,6 +13,14 @@ class WheelRepairer:
 
     Example:
         furiosa_native_runtime-0.11.0.dev240805-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+
+    Where:
+    - furiosa_native_runtime: Distribution name
+    - 0.11.0.dev240805: Version number (development version)
+    - cp310 (1st occurrence): Python tag (CPython 3.10)
+    - cp310 (2nd occurrence): ABI tag (CPython 3.10 ABI)
+    - manylinux_2_17_x86_64: First platform tag (newer manylinux naming convention)
+    - manylinux2014_x86_64: Second platform tag (older manylinux naming convention)
 
     Attributes:
         wheel_path (str): Path to the wheel file to be repaired.
@@ -29,19 +36,21 @@ class WheelRepairer:
         maximizing the wheel's compatibility across different systems.
     """
 
-    def __init__(self, wheel_path, output_dir="repaired_wheels"):
+    def __init__(self, wheel_path, output_dir="repaired_wheels", exclude_patterns=None):
         """Initialize the WheelRepairer.
 
         Args:
             wheel_path (str): Path to the wheel file to be repaired.
             output_dir (str, optional): Directory where the repaired wheel will be saved. 
                 Defaults to "repaired_wheels".
+            exclude_patterns (list, optional): List of patterns for files to exclude. 
+                Defaults to None.
         """
         self.wheel_path = wheel_path
         self.output_dir = output_dir
         self.platform = self._extract_platform()
         self.wheel_files = self._inspect_wheel()
-        self.exclude_patterns = ["libtorch_cpu*.so", "libc10*.so", "libgomp*.so.1"]
+        self.exclude_patterns = exclude_patterns or []
         self.exclude_files = self._find_matching_files()
 
     def _extract_platform(self):
@@ -74,8 +83,24 @@ class WheelRepairer:
             list: A list of file names that match the exclude patterns.
         """
         matching_files = []
+        print("\nDebugging information for pattern matching:")
         for pattern in self.exclude_patterns:
-            matching_files.extend([file for file in self.wheel_files if glob.fnmatch.fnmatch(os.path.basename(file), pattern)])
+            print(f"\nChecking pattern: {pattern}")
+            # If the pattern doesn't start with *, prepend **/
+            if not pattern.startswith('*'):
+                pattern = f'**/{pattern}'
+            print(f"Adjusted pattern: {pattern}")
+            for file in self.wheel_files:
+                if glob.fnmatch.fnmatch(file, pattern):
+                    print(f"  Matched: {file}")
+                    matching_files.append(file)
+                else:
+                    print(f"  Not matched: {file}")
+        
+        print("\nSummary of matched files:")
+        for file in matching_files:
+            print(f"  {file}")
+        
         return matching_files
 
     def prepare_command(self):
@@ -100,7 +125,7 @@ class WheelRepairer:
         print("\nFiles in the wheel:")
         for file in self.wheel_files:
             print(f"  {file}")
-        print("\nFiles to be excluded (full paths):")
+        print("\nFiles to be excluded:")
         for file in self.exclude_files:
             print(f"  {file}")
 
@@ -120,16 +145,17 @@ class WheelRepairer:
             print(f"\nRepaired wheel should be in the '{self.output_dir}' directory.")
         else:
             print("\nDry run completed. No changes were made.")
-        print("\nNote: While full paths are shown for excluded files, only filenames are used in the auditwheel command.")
+        print("\nNote: Full paths are used for excluded files in the auditwheel command.")
 
 def main():
     parser = argparse.ArgumentParser(description="Repair wheel files using auditwheel.")
     parser.add_argument("wheel_path", help="Path to the wheel file to repair")
     parser.add_argument("-o", "--output-dir", default="repaired_wheels", help="Output directory for repaired wheels")
+    parser.add_argument("--exclude", action='append', default=[], help="Patterns of files to exclude (can be used multiple times)")
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes")
     args = parser.parse_args()
 
-    repairer = WheelRepairer(args.wheel_path, args.output_dir)
+    repairer = WheelRepairer(args.wheel_path, args.output_dir, args.exclude)
     repairer.repair(dry_run=args.dry_run)
 
 if __name__ == "__main__":

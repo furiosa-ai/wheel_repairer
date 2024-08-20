@@ -1,11 +1,11 @@
 # Wheel Repairer
 
-Wheel Repairer is a Python tool designed to repair wheel files using auditwheel. It provides an easy-to-use interface for excluding specific files from wheels and repairing them to meet the manylinux standard.
+Wheel Repairer is a Python tool designed to repair wheel files using auditwheel. It provides an easy-to-use interface for excluding specific files from wheels based on patterns and repairing them to meet the manylinux standard.
 
 ## Features
 
 - Automatically detects the platform tag from wheel filenames
-- Allows exclusion of specific files from wheels
+- Allows exclusion of files based on glob patterns
 - Supports dry run mode for testing without making changes
 - Command-line interface for easy integration into build processes
 
@@ -29,11 +29,12 @@ wheel_repairer /path/to/your/wheel.whl
 
 Options:
 - `-o`, `--output-dir`: Specify the output directory for repaired wheels (default: "repaired_wheels")
+- `--exclude`: Specify patterns of files to exclude (can be used multiple times)
 - `--dry-run`: Perform a dry run without making changes
 
 Example:
 ```
-wheel_repairer /path/to/your/wheel.whl --output-dir repaired --dry-run
+wheel_repairer /path/to/your/wheel.whl --output-dir repaired --exclude "*.so" "*.dylib" --dry-run
 ```
 
 ### As a Python Module
@@ -43,7 +44,7 @@ You can also use Wheel Repairer in your Python scripts:
 ```python
 from wheel_repairer import WheelRepairer
 
-repairer = WheelRepairer("/path/to/your/wheel.whl")
+repairer = WheelRepairer("/path/to/your/wheel.whl", exclude_patterns=["*.so", "*.dylib"])
 repairer.repair(dry_run=True)
 ```
 

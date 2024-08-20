@@ -85,7 +85,7 @@ Contributions to Wheel Repairer are welcome! Please feel free to submit a Pull R
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License
 
 ## Acknowledgments
 
@@ -93,4 +93,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Support
 
-If you encounter any problems or have any questions, please open an issue on the [GitHub repository](https://github.com/yourusername/wheel_repairer).
+If you encounter any problems or have any questions, please open an issue.

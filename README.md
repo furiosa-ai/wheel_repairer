@@ -10,6 +10,7 @@ WheelRepairer is a Python tool designed to modify wheel files by removing specif
 - Apply different configurations for different .so files using wildcard patterns
 - Support for dry-run mode to preview changes without modifying files
 - Preserve wheel integrity while modifying its contents
+- Display dynamic state of .so files after patching, including RPATH, NEEDED libraries, and detailed dynamic section information
 
 ## Installation
 
@@ -19,6 +20,7 @@ Clone this repository and install the required dependencies:
 git clone https://github.com/yourusername/wheel-repairer.git
 cd wheel-repairer
 pip install -r requirements.txt
+apt-get install readelf -y
 ```
 
 ## Usage
@@ -84,7 +86,8 @@ WheelRepairer operates in three main steps:
    - For each .so file:
      - Find matching configuration using wildcard patterns
      - Apply specific configurations (RPATH and replacements) if available (or simulate in dry-run mode)
-   - *Inputs used: --exclude, --exclude-regex, configurations from config file, --dry-run*
+     - Display dynamic state of the .so file after patching, including RPATH, NEEDED libraries, and detailed dynamic section information
+   - *Inputs used: configurations from config file, --dry-run*
 
 3. **Wheel Reconstruction and Finalization**
    - Create new wheel file with modified contents (skipped in dry-run mode)
@@ -98,6 +101,8 @@ This workflow ensures that the wheel file is systematically modified according t
 
 - Python 3.6+
 - patchelf (must be installed on the system)
+- readelf (part of binutils, must be installed on the system)
+
 
 ## License
 

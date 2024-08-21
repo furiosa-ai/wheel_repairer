@@ -44,12 +44,13 @@ class WheelRepairer:
     Glob patterns are simpler and suitable for basic file matching, while regular expressions
     offer more powerful and flexible pattern matching capabilities.
     """
-    def __init__(self, wheel_path, output_dir="repaired_wheels", exclude_patterns=None, exclude_regex=None, so_configs=None):
+    def __init__(self, wheel_path, output_dir="repaired_wheels", config=None):
         self.wheel_path = wheel_path
         self.output_dir = output_dir
-        self.exclude_patterns = exclude_patterns or []
-        self.exclude_regex = exclude_regex or []
-        self.so_configs = so_configs or {}
+        self.config = config or {}
+        self.exclude_patterns = self.config.get('exclude', [])
+        self.exclude_regex = self.config.get('exclude_regex', [])
+        self.so_configs = self.config.get('so_configs', {})
         self.wheel_files = self._inspect_wheel()
         self.exclude_files = self._find_matching_files()
 
@@ -174,9 +175,28 @@ class WheelRepairer:
                             print(f"Replaced {lib} with {replacement}")
 
             print("Patches applied successfully.")
+            self.display_dynamic_state(so_file)
         else:
             print("No specific configuration found for this .so file. Skipping patches.")
+
+    def display_dynamic_state(self, so_file):
+        print(f"\nDynamic state of {so_file} after patching:")
         
+        # Display RPATH
+        rpath = subprocess.check_output(['patchelf', '--print-rpath', so_file], universal_newlines=True).strip()
+        print(f"RPATH: {rpath}")
+        
+        # Display NEEDED libraries
+        needed = subprocess.check_output(['patchelf', '--print-needed', so_file], universal_newlines=True).strip().split('\n')
+        print("NEEDED libraries:")
+        for lib in needed:
+            print(f"  {lib}")
+        
+        # Display more detailed information using readelf
+        print("\nDetailed dynamic section information:")
+        readelf_output = subprocess.check_output(['readelf', '-d', so_file], universal_newlines=True)
+        print(readelf_output)
+                
     def find_repaired_wheel(self):
         """Find the repaired wheel in the output directory based on the original wheel name."""
         original_name = os.path.basename(self.wheel_path)
@@ -338,16 +358,14 @@ def main():
     parser = argparse.ArgumentParser(description="Repair wheel files by removing and replacing libraries.")
     parser.add_argument("wheel_path", help="Path to the wheel file to repair")
     parser.add_argument("-o", "--output-dir", default="repaired_wheels", help="Output directory for repaired wheels")
-    parser.add_argument("--exclude", action='append', default=[], help="Glob patterns of files to exclude (can be used multiple times)")
-    parser.add_argument("--exclude-regex", action='append', default=[], help="Regex patterns of files to exclude (can be used multiple times)")
-    parser.add_argument("--config", help="Path to JSON configuration file for .so specific settings")
+    parser.add_argument("--config", required=True, help="Path to JSON configuration file")
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes")
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:
-        so_configs = json.load(f)
+        config = json.load(f)
 
-    repairer = WheelRepairer(args.wheel_path, args.output_dir, args.exclude, args.exclude_regex, so_configs)
+    repairer = WheelRepairer(args.wheel_path, args.output_dir, config)
     repairer.repair(dry_run=args.dry_run)
     
 if __name__ == "__main__":

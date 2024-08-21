@@ -2,7 +2,6 @@ import subprocess
 import glob
 import os
 import zipfile
-import shutil
 import tempfile
 import re
 import argparse
@@ -13,7 +12,7 @@ import hashlib
 import base64
 
 class WheelRepairer:
-    """A class to repair wheel files using auditwheel.
+    """A class to repair wheel files using patchelf.
 
     This class handles wheel files named according to the following convention:
     {distribution}-{version}(-{build tag})?-{python tag}-{abi tag}-{platform tag}.whl

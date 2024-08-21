@@ -32,7 +32,8 @@ setup(
     install_requires=[
         "auditwheel",
         "wheel",
-        "pyyaml"
+        "pyyaml",
+        "patchelf",
     ],
     entry_points={
         "console_scripts": [

@@ -1,0 +1,5 @@
+auditwheel>=6.1.0
+patchelf>=0.17.2
+wheel>=0.43
+setuptools>=58.0
+packaging>=24.1

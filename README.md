@@ -85,10 +85,10 @@ exclude_regex:
   - "^furiosa\\.libs/libc10.*\\.so$"
 so_configs:
   "native_runtime.*.so":
-    rpath: "$ORIGIN/../furiosa.libs:$ORIGIN:$ORIGIN/../"
+    rpath: "$ORIGIN:$ORIGIN/../"
     replace:
       - ["libtorch_cpu*.so", "libtorch_cpu.so"]
-      - ['r"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\\.so(?:\\.[0-9]+)*))$"', "(\\2\\3)"]
+      - ['r"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\.so(?:\.[0-9]+)*))$"', "\\2\\3"]
 ```
 
 ### JSON Configuration (config.json)

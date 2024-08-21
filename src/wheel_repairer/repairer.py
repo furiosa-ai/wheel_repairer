@@ -170,12 +170,12 @@ class WheelRepairer:
                             if regex.match(lib):
                                 new_lib = regex.sub(replacement, lib)
                                 subprocess.run(['patchelf', '--replace-needed', lib, new_lib, so_file], check=True)
-                                print(f"Replaced {lib} with {new_lib}")
+                                print(f"Replaced {lib} with {new_lib} by {pattern}=>{replacement}")
                     else:
                         libs = fnmatch.filter(subprocess.check_output(['patchelf', '--print-needed', so_file], universal_newlines=True).splitlines(), pattern)
                         for lib in libs:
                             subprocess.run(['patchelf', '--replace-needed', lib, replacement, so_file], check=True)
-                            print(f"Replaced {lib} with {replacement}")
+                            print(f"Replaced {lib} with {replacement} by {pattern}")
 
             print("Patches applied successfully.")
             self.display_dynamic_state(so_file)

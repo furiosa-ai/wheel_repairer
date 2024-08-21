@@ -72,7 +72,26 @@ python wheel_repairer.py /path/to/your/wheel.whl --config config.json --dry-run
 
 ## Configuration File
 
-The configuration file (e.g., `config.json`) structure:
+WheelRepairer supports both YAML and JSON configuration files. YAML is recommended for its better readability.
+
+### YAML Configuration (config.yaml)
+
+```yaml
+exclude:
+  - "libtorch_cpu-*.so"
+  - "libgomp-*.so.1"
+  - "libc10-*.so"
+exclude_regex:
+  - "^furiosa\\.libs/libc10.*\\.so$"
+so_configs:
+  "native_runtime.*.so":
+    rpath: "$ORIGIN/../furiosa.libs:$ORIGIN:$ORIGIN/../"
+    replace:
+      - ["libtorch_cpu*.so", "libtorch_cpu.so"]
+      - ['r"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\\.so(?:\\.[0-9]+)*))$"', "(\\2\\3)"]
+```
+
+### JSON Configuration (config.json)
 
 ```json
 {
@@ -86,7 +105,7 @@ The configuration file (e.g., `config.json`) structure:
   ],
   "so_configs": {
     "native_runtime.*.so": {
-      "rpath": "$ORIGIN:$ORIGIN/../",
+      "rpath": "$ORIGIN/../furiosa.libs:$ORIGIN:$ORIGIN/../",
       "replace": [
         ["libtorch_cpu*.so", "libtorch_cpu.so"],
         ["r\"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\\.so(?:\\.[0-9]+)*))$\"", "(\\2\\3)"]
@@ -96,11 +115,13 @@ The configuration file (e.g., `config.json`) structure:
 }
 ```
 
+Configuration file structure:
+
 - `exclude`: List of glob patterns for files to exclude
 - `exclude_regex`: List of regex patterns for files to exclude
 - `so_configs`: Configurations for .so files
   - Keys are wildcard patterns that match .so file names
-  - `rpath`: Specifies the new RPATH(Runtime Search Path) to set for matching .so files
+  - `rpath`: Specifies the new RPATH to set for matching .so files
   - `replace`: A list of [pattern, replacement] pairs for library name replacements
     - If the pattern starts with `r"` and ends with `"`, it's treated as a regular expression
     - Otherwise, it's treated as a glob pattern
@@ -138,6 +159,7 @@ This workflow ensures that the wheel file is systematically modified according t
 - Python 3.6+
 - patchelf
 - readelf (part of binutils)
+- PyYAML
 
 ## License
 

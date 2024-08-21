@@ -8,6 +8,7 @@ import re
 import argparse
 import fnmatch
 import json
+import yaml
 
 class WheelRepairer:
     """A class to repair wheel files using auditwheel.
@@ -358,12 +359,16 @@ def main():
     parser = argparse.ArgumentParser(description="Repair wheel files by removing and replacing libraries.")
     parser.add_argument("wheel_path", help="Path to the wheel file to repair")
     parser.add_argument("-o", "--output-dir", default="repaired_wheels", help="Output directory for repaired wheels")
-    parser.add_argument("--config", required=True, help="Path to JSON configuration file")
+    parser.add_argument("--config", required=True, help="Path to YAML or JSON configuration file")
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes")
     args = parser.parse_args()
 
+    config = {}
     with open(args.config, 'r') as f:
-        config = json.load(f)
+        if args.config.endswith('.yaml') or args.config.endswith('.yml'):
+            config = yaml.safe_load(f)
+        else:
+            config = json.load(f)
 
     repairer = WheelRepairer(args.wheel_path, args.output_dir, config)
     repairer.repair(dry_run=args.dry_run)

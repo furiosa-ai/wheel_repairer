@@ -1,96 +1,123 @@
-# Wheel Repairer
+# WheelRepairer
 
-Wheel Repairer is a Python tool designed to repair wheel files using auditwheel. It provides an easy-to-use interface for excluding specific files from wheels based on glob patterns or regular expressions and repairing them to meet the manylinux standard.
+WheelRepairer is a Python tool designed to modify wheel files by removing specific libraries, updating RPATH, and replacing library names. It's particularly useful for customizing wheels built with Maturin or other tools, allowing for fine-grained control over the contents and dependencies of wheel files.
 
 ## Features
 
-- Automatically detects the platform tag from wheel filenames
-- Allows exclusion of files based on glob patterns
-- Supports regular expression patterns for more flexible file exclusion
-- Supports dry run mode for testing without making changes
-- Command-line interface for easy integration into build processes
+- Remove specific files from wheel based on glob patterns and regular expressions
+- Set RPATH for .so files
+- Replace library names using glob patterns or regular expressions
+- Apply different configurations for different .so files using wildcard patterns
+- Support for dry-run mode to preview changes without modifying files
+- Preserve wheel integrity while modifying its contents
 
 ## Installation
 
-You can install Wheel Repairer using pip:
+Clone this repository and install the required dependencies:
 
-```
-pip install wheel_repairer
+```bash
+git clone https://github.com/yourusername/wheel-repairer.git
+cd wheel-repairer
+pip install -r requirements.txt
 ```
 
 ## Usage
 
-### As a Command-Line Tool
+Basic usage:
 
-You can use Wheel Repairer directly from the command line:
-
+```bash
+python wheel_repairer.py /path/to/your/wheel.whl \
+    --exclude "libtorch_cpu-*.so" \
+    --exclude "libgomp-*.so.1" \
+    --exclude-regex "^furiosa\.libs/libc10.*\.so$" \
+    --config config.json \
+    --dry-run
 ```
-wheel_repairer /path/to/your/wheel.whl
-```
 
-Options:
-- `-o`, `--output-dir`: Specify the output directory for repaired wheels (default: "repaired_wheels")
-- `--exclude`: Specify glob patterns of files to exclude (can be used multiple times)
-- `--exclude-regex`: Specify regex patterns of files to exclude (can be used multiple times)
+### Arguments
+
+- `wheel_path`: Path to the wheel file to repair (required)
+- `-o, --output-dir`: Output directory for repaired wheels (default: "repaired_wheels")
+- `--exclude`: Glob patterns of files to exclude (can be used multiple times)
+- `--exclude-regex`: Regex patterns of files to exclude (can be used multiple times)
+- `--config`: Path to JSON configuration file for .so specific settings
 - `--dry-run`: Perform a dry run without making changes
-- `--debug`: Enable debug output for detailed information on pattern matching
 
-Example:
-```
-wheel_repairer /path/to/your/wheel.whl \
-    --output-dir repaired \
-    --exclude "*.so" \
-    --exclude-regex "lib.*\.so\.1" \
-    --dry-run \
-    --debug
-```
+## Configuration File
 
-### As a Python Module
+The configuration file (e.g., `config.json`) supports wildcard patterns for .so files:
 
-You can also use Wheel Repairer in your Python scripts:
-
-```python
-from wheel_repairer import WheelRepairer
-
-repairer = WheelRepairer(
-    "/path/to/your/wheel.whl",
-    exclude_patterns=["*.so"],
-    exclude_regex=["lib.*\.so\.1"]
-)
-repairer.repair(dry_run=True)
+```json
+{
+  "native_runtime.*.so": {
+    "rpath": "$ORIGIN/../furiosa.libs:$ORIGIN:$ORIGIN/../",
+    "replace": [
+      ["libtorch_cpu*.so", "libtorch_cpu.so"],
+      ["r\"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\\.so(?:\\.[0-9]+)*))$\"", "(\\2\\3)"]
+    ]
+  }
+}
 ```
 
-## File Exclusion Patterns
+This structure allows you to specify different RPATH and replacement rules for groups of .so files that match a certain pattern.
 
-Wheel Repairer supports two types of file exclusion patterns:
+- The key (e.g., "native_runtime.*.so") is a wildcard pattern that matches .so file names.
+- `rpath`: Specifies the new RPATH to set for matching .so files.
+- `replace`: A list of [pattern, replacement] pairs for library name replacements.
+  - If the pattern starts with `r"` and ends with `"`, it's treated as a regular expression.
+  - Otherwise, it's treated as a glob pattern.
 
-1. Glob Patterns (--exclude):
-   - Simple wildcard patterns
-   - Example: `*.so`, `lib*.so`
+## Workflow
 
-2. Regular Expressions (--exclude-regex):
-   - More powerful and flexible pattern matching
-   - Example: `lib.*\.so\.1`, `^furiosa\.libs/.*`
+WheelRepairer operates in three main steps:
 
-Choose the appropriate pattern type based on your needs. Glob patterns are simpler and suitable for basic file matching, while regular expressions offer more advanced pattern matching capabilities.
+1. **Initialization and File Inspection**
+   - Parse command line arguments and configuration file
+   - Initialize WheelRepairer with wheel_path, output_dir, exclude patterns, exclude regex, and .so configurations
+   - Inspect wheel contents
+   - Identify files to exclude based on glob patterns and regex
+   - *Inputs used: wheel_path, output_dir, --exclude, --exclude-regex, --config, --dry-run*
+
+2. **Wheel Modification**
+   - Extract wheel contents to temporary directory
+   - Remove excluded files (or simulate removal in dry-run mode)
+   - For each .so file:
+     - Find matching configuration using wildcard patterns
+     - Apply specific configurations (RPATH and replacements) if available (or simulate in dry-run mode)
+   - *Inputs used: --exclude, --exclude-regex, configurations from config file, --dry-run*
+
+3. **Wheel Reconstruction and Finalization**
+   - Create new wheel file with modified contents (skipped in dry-run mode)
+   - Save new wheel file to output directory (skipped in dry-run mode)
+   - Clean up temporary files
+   - *Inputs used: output_dir, --dry-run*
+
+This workflow ensures that the wheel file is systematically modified according to the specified parameters, maintaining its integrity while applying the desired changes. The dry-run option allows users to preview the changes without actually modifying the wheel file.
 
 ## Requirements
 
 - Python 3.6+
-- auditwheel
-
-## Contributing
-
-Contributions to Wheel Repairer are welcome! Please feel free to submit a Pull Request.
+- patchelf (must be installed on the system)
 
 ## License
 
-This project is licensed under the MIT License
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Troubleshooting
+
+If you encounter any issues or errors, please check the following:
+
+1. Ensure that patchelf is installed and accessible in your system PATH.
+2. Verify that the wheel file you're trying to modify is accessible and not corrupted.
+3. Check your configuration file for any syntax errors.
+
+If problems persist, please open an issue on the GitHub repository with a detailed description of the problem, including any error messages and your command-line arguments.
 
 ## Acknowledgments
 
-- This tool uses `auditwheel` for wheel repair functionality.
-
-## Support
-
-If you encounter any problems or have any questions, please open an issue.
+- This tool uses `patchelf` for modifying ELF files.
+- Inspired by the need to customize Python wheels for specific environments and dependencies.

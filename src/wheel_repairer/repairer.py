@@ -2,8 +2,12 @@ import subprocess
 import glob
 import os
 import zipfile
+import shutil
+import tempfile
 import re
 import argparse
+import fnmatch
+import json
 
 class WheelRepairer:
     """A class to repair wheel files using auditwheel.
@@ -40,24 +44,13 @@ class WheelRepairer:
     Glob patterns are simpler and suitable for basic file matching, while regular expressions
     offer more powerful and flexible pattern matching capabilities.
     """
-    def __init__(self, wheel_path, output_dir="repaired_wheels", exclude_patterns=None, exclude_regex=None):
-        """Initialize the WheelRepairer.
-
-        Args:
-            wheel_path (str): Path to the wheel file to be repaired.
-            output_dir (str, optional): Directory where the repaired wheel will be saved. 
-                Defaults to "repaired_wheels".
-            exclude_patterns (list, optional): List of glob patterns for files to exclude. 
-                Defaults to None.
-            exclude_regex (list, optional): List of regex patterns for files to exclude. 
-                Defaults to None.
-        """
+    def __init__(self, wheel_path, output_dir="repaired_wheels", exclude_patterns=None, exclude_regex=None, so_configs=None):
         self.wheel_path = wheel_path
         self.output_dir = output_dir
-        self.platform = self._extract_platform()
-        self.wheel_files = self._inspect_wheel()
         self.exclude_patterns = exclude_patterns or []
         self.exclude_regex = exclude_regex or []
+        self.so_configs = so_configs or {}
+        self.wheel_files = self._inspect_wheel()
         self.exclude_files = self._find_matching_files()
 
     def _extract_platform(self):
@@ -147,36 +140,215 @@ class WheelRepairer:
         print("\nFiles to be excluded:")
         for file in self.exclude_files:
             print(f"  {file}")
+            
+    def get_so_config(self, so_file):
+        so_name = os.path.basename(so_file)
+        for pattern, config in self.so_configs.items():
+            if fnmatch.fnmatch(so_name, pattern):
+                return config
+        return None
+    
+    def apply_patches(self, so_file):
+        print(f"\nApplying patches to: {so_file}")
+        config = self.get_so_config(so_file)
 
-    def repair(self, dry_run=True):
-        """Repair the wheel using auditwheel.
+        if config:
+            if 'rpath' in config:
+                subprocess.run(['patchelf', '--set-rpath', config['rpath'], so_file], check=True)
+                print(f"Set RPATH to: {config['rpath']}")
 
-        Args:
-            dry_run (bool, optional): If True, only print the command without executing it. 
-                Defaults to True.
-        """
-        self.print_wheel_info()
-        cmd = self.prepare_command()
-        print("\nExecuting command:")
-        print(" ".join(cmd))
-        if not dry_run:
-            subprocess.run(cmd)
-            print(f"\nRepaired wheel should be in the '{self.output_dir}' directory.")
+            if 'replace' in config:
+                for pattern, replacement in config['replace']:
+                    if pattern.startswith('r"') and pattern.endswith('"'):
+                        regex = re.compile(pattern[2:-1])
+                        output = subprocess.check_output(['patchelf', '--print-needed', so_file], universal_newlines=True)
+                        for lib in output.splitlines():
+                            if regex.match(lib):
+                                new_lib = regex.sub(replacement, lib)
+                                subprocess.run(['patchelf', '--replace-needed', lib, new_lib, so_file], check=True)
+                                print(f"Replaced {lib} with {new_lib}")
+                    else:
+                        libs = fnmatch.filter(subprocess.check_output(['patchelf', '--print-needed', so_file], universal_newlines=True).splitlines(), pattern)
+                        for lib in libs:
+                            subprocess.run(['patchelf', '--replace-needed', lib, replacement, so_file], check=True)
+                            print(f"Replaced {lib} with {replacement}")
+
+            print("Patches applied successfully.")
         else:
-            print("\nDry run completed. No changes were made.")
-        print("\nNote: Full paths are used for excluded files in the auditwheel command.")
+            print("No specific configuration found for this .so file. Skipping patches.")
+        
+    def find_repaired_wheel(self):
+        """Find the repaired wheel in the output directory based on the original wheel name."""
+        original_name = os.path.basename(self.wheel_path)
+        name_parts = original_name.split('-')
+        
+        # Create a pattern that matches the package name and version, but allows for changes in the platform tag
+        name_pattern = f"{'-'.join(name_parts[:2])}-*-{'-'.join(name_parts[3:-1])}-*.whl"
+        
+        repaired_wheels = glob.glob(os.path.join(self.output_dir, name_pattern))
+        if repaired_wheels:
+            return max(repaired_wheels, key=os.path.getctime)  # Return the most recently created wheel
+        return None
+    
+    def remove_dependencies(self, wheel_dir, files_to_exclude):
+        """Remove dependencies and references to excluded libraries."""
+        print("\nRemoving dependencies and references to excluded libraries...")
+        so_file = os.path.join(wheel_dir, 'furiosa/native_runtime.cpython-310-x86_64-linux-gnu.so')
+        
+        if os.path.exists(so_file):
+            # 현재 의존성 출력
+            print("Current dependencies:")
+            subprocess.run(['ldd', so_file])
+
+            for file in files_to_exclude:
+                lib_name = os.path.basename(file)
+                subprocess.run(['patchelf', '--remove-needed', lib_name, so_file])
+                print(f"Removed dependency: {lib_name}")
+                
+            print("\nDependencies after removal:")
+            subprocess.run(['ldd', so_file])
+        else:
+            print(f"Warning: {so_file} not found. Skipping dependency removal.")
+
+    def remove_excluded_files(self, wheel_path, files_to_exclude):
+        """Remove specified files from the wheel and apply patches."""
+        print(f"\nStarting process to remove excluded files and apply patches: {wheel_path}")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            print(f"Created temporary directory: {tmpdir}")
+            
+            # Unzip the wheel
+            print("Unzipping the wheel file...")
+            with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
+                zip_ref.extractall(tmpdir)
+            print("Wheel file unzipped successfully.")
+            
+            # Remove excluded files
+            print("\nRemoving excluded files...")
+            for file in files_to_exclude:
+                file_path = os.path.join(tmpdir, file)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    print(f"  Removed: {file}")
+                else:
+                    print(f"  File not found (already removed or never existed): {file}")
+            
+            # Apply patches to .so files
+            for root, _, files in os.walk(tmpdir):
+                for file in files:
+                    if file.endswith('.so'):
+                        self.apply_patches(os.path.join(root, file))
+            
+            # Create a new wheel without excluded files and with patched .so files
+            print("\nCreating new wheel...")
+            new_wheel_path = wheel_path.replace('.whl', '_repaired.whl')
+            with zipfile.ZipFile(new_wheel_path, 'w', zipfile.ZIP_DEFLATED) as new_zip:
+                for root, _, files in os.walk(tmpdir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, tmpdir)
+                        new_zip.write(file_path, arc_name)
+                        print(f"  Added to new wheel: {arc_name}")
+            
+            # Replace the original wheel with the new one
+            print(f"\nReplacing original wheel with repaired version...")
+            shutil.move(new_wheel_path, wheel_path)
+            print(f"Wheel file updated: {wheel_path}")
+        """Remove specified files from the wheel and their dependencies."""
+        print(f"\nStarting process to remove excluded files from: {wheel_path}")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            print(f"Created temporary directory: {tmpdir}")
+            
+            # Unzip the wheel
+            print("Unzipping the wheel file...")
+            with zipfile.ZipFile(wheel_path, 'r') as zip_ref:
+                zip_ref.extractall(tmpdir)
+            print("Wheel file unzipped successfully.")
+            
+            # Remove excluded files
+            print("\nRemoving excluded files...")
+            for file in files_to_exclude:
+                file_path = os.path.join(tmpdir, file)
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    print(f"  Removed: {file}")
+                else:
+                    print(f"  File not found (already removed or never existed): {file}")
+            
+            # Remove dependencies
+            self.remove_dependencies(tmpdir, files_to_exclude)
+            
+            # Create a new wheel without excluded files
+            print("\nCreating new wheel without excluded files...")
+            new_wheel_path = wheel_path.replace('.whl', '_cleaned.whl')
+            with zipfile.ZipFile(new_wheel_path, 'w', zipfile.ZIP_DEFLATED) as new_zip:
+                for root, _, files in os.walk(tmpdir):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arc_name = os.path.relpath(file_path, tmpdir)
+                        new_zip.write(file_path, arc_name)
+                        print(f"  Added to new wheel: {arc_name}")
+            
+            # Replace the original wheel with the new one
+            print(f"\nReplacing original wheel with cleaned version...")
+            shutil.move(new_wheel_path, wheel_path)
+            print(f"Wheel file updated: {wheel_path}")
+            
+    def repair(self, dry_run=False):
+        print(f"\nRepairing wheel: {self.wheel_path}")
+        os.makedirs(self.output_dir, exist_ok=True)
+        output_wheel = os.path.join(self.output_dir, os.path.basename(self.wheel_path))
+
+        if dry_run:
+            print("Dry run mode: No changes will be made.")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            print(f"Created temporary directory: {tmpdir}")
+            
+            with zipfile.ZipFile(self.wheel_path, 'r') as zip_ref:
+                zip_ref.extractall(tmpdir)
+            
+            for root, _, files in os.walk(tmpdir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(file_path, tmpdir)
+                    
+                    if rel_path in self.exclude_files:
+                        if not dry_run:
+                            os.remove(file_path)
+                        print(f"{'Would remove' if dry_run else 'Removed'}: {rel_path}")
+                    elif file.endswith('.so'):
+                        if not dry_run:
+                            self.apply_patches(file_path)
+                        else:
+                            print(f"Would apply patches to: {rel_path}")
+            
+            if not dry_run:
+                with zipfile.ZipFile(output_wheel, 'w', zipfile.ZIP_DEFLATED) as new_zip:
+                    for root, _, files in os.walk(tmpdir):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arc_name = os.path.relpath(file_path, tmpdir)
+                            new_zip.write(file_path, arc_name)
+                            print(f"Added to new wheel: {arc_name}")
+                print(f"\nRepaired wheel saved as: {output_wheel}")
+            else:
+                print("\nDry run completed. No changes were made.")
 
 def main():
-    parser = argparse.ArgumentParser(description="Repair wheel files using auditwheel.")
+    parser = argparse.ArgumentParser(description="Repair wheel files by removing and replacing libraries.")
     parser.add_argument("wheel_path", help="Path to the wheel file to repair")
     parser.add_argument("-o", "--output-dir", default="repaired_wheels", help="Output directory for repaired wheels")
-    parser.add_argument("--exclude", action='append', default=[], help="Patterns of files to exclude (can be used multiple times)")
+    parser.add_argument("--exclude", action='append', default=[], help="Glob patterns of files to exclude (can be used multiple times)")
     parser.add_argument("--exclude-regex", action='append', default=[], help="Regex patterns of files to exclude (can be used multiple times)")
+    parser.add_argument("--config", help="Path to JSON configuration file for .so specific settings")
     parser.add_argument("--dry-run", action="store_true", help="Perform a dry run without making changes")
     args = parser.parse_args()
 
-    repairer = WheelRepairer(args.wheel_path, args.output_dir, args.exclude, args.exclude_regex)
-    repairer.repair(dry_run=args.dry_run)
+    with open(args.config, 'r') as f:
+        so_configs = json.load(f)
 
+    repairer = WheelRepairer(args.wheel_path, args.output_dir, args.exclude, args.exclude_regex, so_configs)
+    repairer.repair(dry_run=args.dry_run)
+    
 if __name__ == "__main__":
     main()

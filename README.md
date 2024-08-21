@@ -88,7 +88,7 @@ so_configs:
     rpath: "$ORIGIN:$ORIGIN/../"
     replace:
       - ["libtorch_cpu*.so", "libtorch_cpu.so"]
-      - ['r"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\.so(?:\.[0-9]+)*))$"', "\\2\\3"]
+      - ['r"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\.so(?:\.[0-9]+)*))$"', '\2\3']
 ```
 
 ### JSON Configuration (config.json)
@@ -135,7 +135,8 @@ WheelRepairer operates in three main steps:
    - Initialize WheelRepairer with wheel_path, output_dir, and configurations
    - Inspect wheel contents
    - Identify files to exclude based on glob patterns and regex from the config
-   - *Inputs used: wheel_path, output_dir, --config, --dry-run*
+   - *Inputs used:*
+     - Config file: 'exclude', 'exclude_regex'
 
 2. **Wheel Modification**
    - Extract wheel contents to temporary directory
@@ -144,15 +145,24 @@ WheelRepairer operates in three main steps:
      - Find matching configuration using wildcard patterns
      - Apply specific configurations (RPATH and replacements) if available (or simulate in dry-run mode)
      - Display dynamic state of the .so file after patching, including RPATH, NEEDED libraries, and detailed dynamic section information
-   - *Inputs used: configurations from config file, --dry-run*
+   - Update RECORD file to reflect changes
+   - *Inputs used:*
+     - Config file: 'so_configs' (including 'rpath' and 'replace' sub-fields)
 
 3. **Wheel Reconstruction and Finalization**
    - Create new wheel file with modified contents (skipped in dry-run mode)
    - Save new wheel file to output directory (skipped in dry-run mode)
    - Clean up temporary files
-   - *Inputs used: output_dir, --dry-run*
 
 This workflow ensures that the wheel file is systematically modified according to the specified parameters, maintaining its integrity while applying the desired changes. The dry-run option allows users to preview the changes without actually modifying the wheel file.
+
+Config File Fields Used:
+- 'exclude': List of glob patterns for files to exclude (used in step 1)
+- 'exclude_regex': List of regex patterns for files to exclude (used in step 1)
+- 'so_configs': Configurations for .so files (used in step 2)
+  - Keys are wildcard patterns that match .so file names
+  - 'rpath': Specifies the new RPATH to set for matching .so files
+  - 'replace': A list of [pattern, replacement] pairs for library name replacements
 
 ## Requirements
 

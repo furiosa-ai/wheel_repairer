@@ -9,6 +9,8 @@ import argparse
 import fnmatch
 import json
 import yaml
+import hashlib
+import base64
 
 class WheelRepairer:
     """A class to repair wheel files using auditwheel.
@@ -313,7 +315,43 @@ class WheelRepairer:
             print(f"\nReplacing original wheel with cleaned version...")
             shutil.move(new_wheel_path, wheel_path)
             print(f"Wheel file updated: {wheel_path}")
-            
+
+    def find_dist_info_dir(self, tmpdir):
+        for item in os.listdir(tmpdir):
+            if item.endswith('.dist-info'):
+                return item
+        raise ValueError("Could not find .dist-info directory in the wheel")
+
+    def get_package_name_and_version(self, dist_info_dir):
+        match = re.match(r'(.+)-(.+)\.dist-info', dist_info_dir)
+        if match:
+            return match.group(1), match.group(2)
+        raise ValueError(f"Could not extract package name and version from {dist_info_dir}")
+
+    def update_record_file(self, tmpdir):
+        dist_info_dir = self.find_dist_info_dir(tmpdir)
+        package_name, version = self.get_package_name_and_version(dist_info_dir)
+        record_file = os.path.join(tmpdir, dist_info_dir, 'RECORD')
+
+        new_record_entries = []
+
+        for root, _, files in os.walk(tmpdir):
+            for file in files:
+                file_path = os.path.join(root, file)
+                rel_path = os.path.relpath(file_path, tmpdir)
+                
+                if rel_path == os.path.join(dist_info_dir, 'RECORD'):
+                    new_record_entries.append(f"{rel_path},,\n")
+                else:
+                    with open(file_path, 'rb') as f:
+                        file_hash = hashlib.sha256(f.read()).digest()
+                        hash_value = base64.urlsafe_b64encode(file_hash).rstrip(b'=').decode()
+                    file_size = os.path.getsize(file_path)
+                    new_record_entries.append(f"{rel_path},sha256={hash_value},{file_size}\n")
+
+        with open(record_file, 'w') as f:
+            f.writelines(new_record_entries)
+                        
     def repair(self, dry_run=False):
         print(f"\nRepairing wheel: {self.wheel_path}")
         os.makedirs(self.output_dir, exist_ok=True)
@@ -344,6 +382,7 @@ class WheelRepairer:
                             print(f"Would apply patches to: {rel_path}")
             
             if not dry_run:
+                self.update_record_file(tmpdir)
                 with zipfile.ZipFile(output_wheel, 'w', zipfile.ZIP_DEFLATED) as new_zip:
                     for root, _, files in os.walk(tmpdir):
                         for file in files:

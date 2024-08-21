@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wheel_repairer"
+description = "A tool to repair wheel files by removing and replacing libraries"
+readme = "README.md"
+requires-python = ">=3.6"
+license = {file = "LICENSE"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "wheel",
+    "setuptools",
+    "packaging",
+    "pyyaml",
+]
+dynamic = ["version"]
+
+[project.scripts]
+wheel_repairer = "wheel_repairer.repairer:main"
+
+[tool.setuptools_scm]
+write_to = "src/wheel_repairer/_version.py"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/furiosa-ai/wheel_repairer"
+"Bug Tracker" = "https://github.com/furiosa-ai/wheel_repairer/issues"

@@ -42,3 +42,10 @@ where = ["src"]
 [project.urls]
 Homepage = "https://github.com/furiosa-ai/wheel_repairer"
 "Bug Tracker" = "https://github.com/furiosa-ai/wheel_repairer/issues"
+
+[tool.black]
+target-version = ["py38", "py39", "py310", "py311", "py312", "py313"]
+
+[tool.isort]
+py_version = 38
+profile = "black"

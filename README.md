@@ -88,7 +88,7 @@ so_configs:
     rpath: "$ORIGIN:$ORIGIN/../"
     replace:
       - ["libtorch_cpu*.so", "libtorch_cpu.so"]
-      - ['r"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\.so(?:\.[0-9]+)*))$"', '\2\3']
+      - ['r"^(?P<path>.*?/)?(?P<basename>[^/-]+)(?:-(?P<hash>[0-9a-f]{8}))(?P<extension>\.so(?:\.[0-9]+)*)$"', '\g<path>\g<basename>\g<extension>']
 ```
 
 ### JSON Configuration (config.json)
@@ -108,7 +108,7 @@ so_configs:
       "rpath": "$ORIGIN/../furiosa.libs:$ORIGIN:$ORIGIN/../",
       "replace": [
         ["libtorch_cpu*.so", "libtorch_cpu.so"],
-        ["r\"^(?:.*/)?(([^/]+)-[0-9a-f]{8}(\\.so(?:\\.[0-9]+)*))$\"", "(\\2\\3)"]
+        ["r\"^(?P<path>.*?/)?(?P<basename>[^/-]+)(?:-(?P<hash>[0-9a-f]{8}))?(?P<extension>\\.so(?:\\.[0-9]+)*)$\"", "\\g<path>\\g<basename>\\g<extension>"]
       ]
     }
   }
